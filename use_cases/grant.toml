@@ -1,0 +1,90 @@
+# The grant use case: a grant or RFP application, read as the funder's screening panel would.
+# Format: use_cases/README.md.
+
+purpose = "a grant or RFP application, read as the funder's screening panel would"
+# Declared every run: a use case that allows more than one level never implies one.
+sensitivity = ["internal", "confidential"]
+
+# Appended to every hat's role: a model asked for a funder's rules, a going rate or a
+# baseline will otherwise supply one.
+shared_role = '''
+Judge the application by what it states and, when supplied, the PUBLIC CRITERIA block (the
+funder's published call). Never assert a funder rule, priority, eligibility condition,
+typical grant size, market rate, baseline or benchmark that neither gives: say what would
+need checking.
+'''
+
+[sensitivity_notes]
+internal = '''
+for a grant application, that means the form text and the budget as the funder will see
+them, never the internal cost workings, your source material or a partner's confidential
+terms; funders are high-stakes readers, so the review stays verifier-only
+'''
+
+[briefs.impact]
+reads_criteria = true
+text = '''
+Evaluate the case for impact. Trace the theory of change from activities to outputs to
+outcomes, and find: a causal step or assumption that is missing or unstated; an output
+(events held, people reached, tools shipped) presented as an outcome; an outcome claim with
+no evidence, or evidence that does not show what is claimed; a metric with no baseline,
+target, method or owner; no counterfactual (what would happen without this grant); and
+nothing that lasts after the grant ends. Where the PUBLIC CRITERIA block sets the outcomes,
+metrics or reporting the call requires, check the draft against them; where the call does
+not ask for an element (a retroactive round needs no baseline), say so rather than rank its
+absence. Quote the passage; rank by effect on the funding decision.
+'''
+
+[briefs.budget]
+reads_criteria = true
+text = '''
+Review the budget against the work it pays for. Find: an activity with no cost, or a cost
+with no activity; a conflated or double-counted line; figures that do not add up; a rate or
+total out of line with the work described; overhead above any cap; a match or cost-share
+that is pledged rather than secured, or not valued; spend that does not follow the
+workplan; and other funding for the same costs, or no word on how the work is paid for
+after the grant. Check every cap, match or eligible-cost rule the draft states or the
+PUBLIC CRITERIA block sets. If the draft has no budget, say so in "overall" and review what
+it says about money. Quote the line or figure; rank by effect on the funding decision.
+'''
+
+[[hats]]
+name = "program-officer"
+title = "program officer"
+briefs = ["fit", "redteam"]
+looks_for = '''
+You are the funder's program officer, screening this application before it reaches the
+committee. You read it against the funder's published criteria and priorities: eligibility,
+fit with the programme, the size of the ask against the work, whether the team can deliver
+it (the timeline and milestones, dependencies on partners, key-person risk, and the risks
+the draft names or leaves out), and the reasons you would decline it or send it back.
+'''
+
+[[hats]]
+name = "impact-evaluator"
+title = "impact evaluator"
+briefs = ["impact", "refute"]
+looks_for = '''
+You are an impact evaluator who assesses proposals for the funder. You read for whether the
+promised change is real and measurable: the theory of change, outcomes as distinct from
+outputs, the evidence behind each claim, the metrics and how they will be gathered, the
+counterfactual, and what lasts after the grant.
+'''
+
+[[hats]]
+name = "budget-reviewer"
+title = "budget reviewer"
+briefs = ["budget", "refute"]
+looks_for = '''
+You review budgets for the funder. You read the money against the work: every activity
+costed and every cost tied to an activity, cost realism, the arithmetic, overhead, the
+match or cost-share and whether it is secured, whether the spend follows the workplan, and
+how the work is funded beside and after this grant.
+'''
+
+[output]
+verdict = "whether the panel would fund it, decline it or send it back, and why"
+guidance = '''
+Funders are high-stakes readers: the author makes every change in their own words. This use
+case does not read for AI tells; for that check, run the draft separately with --brief tells.
+'''

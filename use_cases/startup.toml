@@ -1,0 +1,58 @@
+# The startup use case: an investment memo or deck, read as an investment committee would.
+# Format: use_cases/README.md.
+
+purpose = "a startup evaluation: a redacted investment memo or deck"
+sensitivity = ["confidential"]
+redacted = true
+
+[briefs.diligence]
+text = '''
+Diligence the load-bearing claims (team, traction, market, product, technology, terms). For
+each: the evidence the document gives, what it would take to verify it, and what would
+change the decision if it were false. Rank by effect on the investment decision.
+'''
+
+[[hats]]
+name = "vc"
+title = "VC partner"
+briefs = ["diligence", "redteam"]
+looks_for = '''
+You are a VC partner deciding whether to back this company. You read for the investment
+case: team, market, traction, the edge, the terms, and the reasons a partnership would pass.
+'''
+
+[[hats]]
+name = "operator"
+title = "operator"
+briefs = ["diligence"]
+looks_for = '''
+You are an operator who has built and scaled companies. You read for whether the plan can
+be executed: hiring, go-to-market, unit economics, sequencing, and what breaks first.
+'''
+
+[[hats]]
+name = "lp"
+title = "LP / allocator"
+briefs = ["redteam"]
+looks_for = '''
+You are an LP / allocator who backs the fund or studio making this investment. You read for
+portfolio fit, concentration and governance risk, conflicts, and whether you could defend
+this decision to your own investment committee.
+'''
+
+[[hats]]
+name = "techdd"
+title = "technical diligence"
+briefs = ["diligence", "refute"]
+looks_for = '''
+You lead technical diligence. You read for whether the technology does what is claimed:
+architecture, defensibility, technical risk, security, and the claims a demo or a code
+review would confirm or refute.
+'''
+
+[output]
+verdict = "the investment verdict (pass, dig deeper, or proceed) and the reason that decides it"
+guidance = '''
+The chorus checks the memo's reasoning; it does not replace diligence. Keep the report with
+the deal file, out of any shared or public repo.
+'''

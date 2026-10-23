@@ -1,0 +1,57 @@
+# The code use case: a diff or a set of files, read by three engineers.
+# Format: use_cases/README.md.
+
+purpose = "a code diff or a set of files"
+sensitivity = ["public", "confidential"]
+
+[sensitivity_notes]
+public = '''
+for code, public means open-source code. An unmerged security fix stays confidential even
+in a public repo, and so does code with a known unfixed vulnerability: round 2 shares every
+single-family finding, vulnerability write-ups included, with every voice in the run
+'''
+
+[briefs.defects]
+text = '''
+Review the code or diff for defects in your hat's area. For each: the line (quoted
+verbatim), what goes wrong, under what input or condition, and the consequence. Rank by
+impact; skip style preferences and anything a linter would catch.
+'''
+
+[[hats]]
+name = "security"
+title = "security engineer and pen-tester"
+briefs = ["defects"]
+looks_for = '''
+You are a security engineer and pen-tester. You attack the code: injection, broken
+authentication or authorization, secret handling and exposure, SSRF and unsafe outbound
+requests, unsafe deserialization and file handling, and supply-chain risk in dependencies,
+build and CI. Give the entry point, the attack and its impact.
+'''
+
+[[hats]]
+name = "sre"
+title = "DevOps / SRE"
+briefs = ["defects"]
+looks_for = '''
+You are the DevOps / SRE engineer who will deploy and run this. You read for operational
+risk: deploy and migration order, configuration and environment assumptions, failure modes
+and their blast radius, observability, and whether the change can be rolled back.
+'''
+
+[[hats]]
+name = "reviewer"
+title = "senior reviewer"
+briefs = ["defects", "refute"]
+looks_for = '''
+You are a senior reviewer. You read for correctness: logic errors, unhandled edge cases and
+error paths, races, broken contracts with callers, and comments or tests that claim what
+the code does not do.
+'''
+
+[output]
+verdict = "whether you would merge this as is, and the defect that matters most"
+guidance = '''
+Fix findings on the working branch. Keep vulnerability findings local: never in a commit
+message, pull request body or public issue until the fix has shipped.
+'''

@@ -1,0 +1,8 @@
+# Keys never live in this repo.
+.env
+*.env
+!.env.example
+
+__pycache__/
+*.pyc
+.DS_Store

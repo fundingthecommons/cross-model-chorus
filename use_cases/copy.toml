@@ -1,0 +1,69 @@
+# The copy use case: copy that asks its reader to act, read by the people it has to move.
+# Format: use_cases/README.md.
+
+purpose = "copy that asks its reader to act: a pitch, a fundraising or sponsorship ask, a launch post, a landing page"
+sensitivity = ["public", "internal", "confidential"]
+
+# At internal (a draft bound for a funder, say), the fundraiser also reads as the funder's
+# screener, and --criteria (the funder's published call) is allowed.
+[extra_briefs.internal]
+fundraiser = ["fit"]
+
+[briefs.next-step]
+text = '''
+Read as the reader this copy has to move: a funder, sponsor, investor or customer. Does it
+get them to a next step (a reply, a meeting, a grant, a sponsorship, an investment, a
+sign-up)? Find where it fails to move that reader toward a next step, what such a reader
+would need that it leaves out, and where it spends words that do neither. Rank by effect on
+whether the reader acts.
+'''
+
+[[hats]]
+name = "copywriter"
+title = "copywriter"
+briefs = ["next-step", "tells"]
+looks_for = '''
+You are a senior copywriter. You read for whether the copy lands with its audience:
+clarity, specificity, the opening and the ask, and the shape-and-symmetry tells that make a
+reader suspect AI.
+'''
+
+[[hats]]
+name = "fundraiser"
+title = "fundraiser"
+briefs = ["next-step", "refute"]
+looks_for = '''
+You are an experienced fundraiser for a mission-driven organization. You read for whether
+the copy moves a funder or sponsor to a next step: the ask, the evidence of impact, the
+reason to act now, and the claims a funder would check.
+'''
+
+[[hats]]
+name = "vc"
+title = "sophisticated VC"
+briefs = ["next-step", "redteam"]
+looks_for = '''
+You are a sophisticated venture investor deciding whether to take the meeting. You read for
+the edge, why this team, why now, what is unproven, and what would make you pass.
+'''
+
+[[hats]]
+name = "lp"
+title = "sophisticated LP"
+briefs = ["next-step", "redteam"]
+looks_for = '''
+You are a sophisticated LP / allocator who backs funds and programmes. You read for track
+record, governance, alignment of incentives, durability, and how the work compounds over
+years, and you notice what a manager would rather you did not ask.
+'''
+
+[output]
+verdict = "whether the copy moves its reader to the next step it asks for, and what most stands in the way"
+# Suggested wording (--rewrites) only on public copy, and only on the operator's word that it
+# is low-stakes. Internal and confidential copy stay verifier-only.
+rewrites = ["public"]
+guidance = '''
+Relay the quoted line and the issue to the author. Copy bound for a high-stakes reader (a
+funder, an investor, a critic who knows the author's voice) stays verifier-only: the author
+fixes it in their own words.
+'''
