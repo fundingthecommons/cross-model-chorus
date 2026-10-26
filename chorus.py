@@ -34,32 +34,45 @@ role prompt plus the briefs it runs. The shipped use cases:
   startup    vc · operator · lp · techdd              confidential only, on a redacted copy
   grant      program-officer · impact-evaluator ·     internal or confidential, declared
              budget-reviewer                          every run (never implied); verifier-only
-Every hat is worn on every run: a seeded shuffle deals the hats over the voices that run,
-and a voice wears several hats when hats outnumber voices. The seed defaults to a hash of
-the use case, the draft and the local date, so a --yes run on the same date deals as its
-dry run did, and who wears which hat rotates across drafts and days; --seed fixes it, and
---hats voice=hat,... pins a voice's hats (when every voice is pinned, the unpinned hats
-still go to the voices wearing fewest). The report records the seed, the pins and the
-voice-to-hat map and tags every finding with its hat. Round 2 keeps the hats: each
-examiner judges as its own hat. The same passage flagged by different families wearing
-different hats is the strongest signal. A redacted run names the files of a file set by
-number only, and --criteria runs only where a brief reads it ('fit', and any use-case
-brief marked reads_criteria).
+Every hat is worn on every run: a seeded shuffle deals the hats over the voices that run, a
+voice wears several hats when hats outnumber voices, and two voices share a hat when voices
+outnumber hats. The seed defaults to a hash of the use case, the draft and the local date, so
+a --yes run on the same date deals as its dry run did, and who wears which hat rotates across
+drafts and days; --seed fixes it, and --hats voice=hat,... pins a voice's hats (when every
+voice is pinned, the unpinned hats still go to the voices wearing fewest). The report records
+the seed, the pins and the voice-to-hat map and tags every finding with its hat. Round 2 keeps
+the hats: each examiner judges as its own hat. The same passage flagged by different families
+wearing different hats is the strongest signal. A redacted run names the files of a file set
+by number only, and --criteria runs only where a brief reads it ('fit', and any use-case brief
+marked reads_criteria).
 
 VOICES, one per model family. Keys come from environment variables only (names in
 .env.example). --env-file PATH, or CHORUS_ENV_FILE, loads a dotenv file kept outside every
 repo, never overriding a variable already set. A missing key skips that voice cleanly.
-  openai  OpenAI GPT-6.1 Sol    api.openai.com       OPENAI_API_KEY  frontier
-  kimi    Moonshot Kimi K3      inference.phala.com  PHALA_API_KEY   TEE, checked per call
-  glm     Zhipu GLM 5.3         inference.phala.com  PHALA_API_KEY   TEE, checked per call
-  gemini  Google Gemini         googleapis.com       GEMINI_API_KEY  frontier, opt-in
-Gemini runs only when named in --voices. Kimi and GLM run only through Phala's gateway.
+  openai  OpenAI GPT-6.1 Sol    api.openai.com       OPENAI_API_KEY     frontier
+  kimi    Moonshot Kimi K3      inference.phala.com  PHALA_API_KEY      TEE, checked per call
+  glm     Zhipu GLM 5.3         inference.phala.com  PHALA_API_KEY      TEE, checked per call
+  gemini  Google Gemini         googleapis.com       GEMINI_API_KEY     frontier, opt-in
+  claude  Anthropic Opus 5.5    api.anthropic.com    ANTHROPIC_API_KEY  frontier
+Gemini runs only when named in --voices. Claude asks for Anthropic's server-side fallback
+(fallbacks "default") on the models that take it, so a request its safeguards decline can
+be answered by the Claude model Anthropic recommends; the report names that model and
+leaves the call unpriced. Claude is streamed; --timeout bounds its whole answer. Kimi and
+GLM run only through Phala's gateway.
 Every call to a TEE voice, at every sensitivity, is (1) refused unless the live catalog
 lists the model with a top-level is_tee=true, (2) sent with provider.aci_verified
 so the gateway refuses rather than route to an unattested upstream, and (3) streamed, so
 its receipt id arrives first and the receipt is checked even if the answer is slow
 (upstream.verified: result verified, required true, a session id; the receipt's model and
 id must match the request).
+
+DRAFTED BY. When the draft was written with a model's help, name that model's voice with
+--drafted-by (e.g. --drafted-by claude). A model tends to favour its own family's writing,
+so the runner keeps its findings in full and counts its approval for less. That family
+still reviews in both rounds, and the report labels it the drafting family. Its pass on the
+tells brief is shown as weak evidence, and its "refuted" in round 2 counts only as
+"disputed". Two drafting families agreeing with each other is no corroboration. An agent
+that helped write the draft names its own family.
 
 UPSTREAM PINNING. The gateway can serve one model from several upstream providers, and the
 catalog's is_tee flag says the model can be served in a TEE, not which upstream serves a
@@ -75,20 +88,21 @@ only pinned sessions on approved upstreams, or the run exits 5. Live receipts ca
 serving session but no upstream name, so a hop is named by its session. --upstream
 voice=name pins a voice by hand at any sensitivity.
 
-EFFORT, CLOCKS AND STATS. --effort is sent to OpenAI as is and mapped for the TEE models by
-exact id, as a top-level reasoning_effort only: Kimi K3 and GLM 5.3 take low|high|max, GLM
-5.2 takes high|max, and GLM never gets medium, none or minimal. It is sent only when the
-live catalog lists reasoning_effort for the model; voice=unset sends none (the model's own
-default). Each TEE call runs three clocks: the first data line must arrive within
---first-data seconds (headers included); --timeout is the wall for the whole answer, per
-voice if you like (--timeout glm=900); and a gap of 120 s between data lines is logged, not
-enforced. Reasoning deltas count as data; the gateway's ": PROCESSING" heartbeats do not. A
-stopped call says which way it stopped: never started, stalled, still reasoning at the
-deadline, or still answering. Every streamed call records its stream counts and times
+EFFORT, CLOCKS AND STATS. --effort is sent to OpenAI as is; to Claude as output_config.effort,
+as is except none → low (its thinking stays on), for the ids in CLAUDE_EFFORT; and mapped for
+the TEE models by exact id, as a top-level reasoning_effort only: Kimi K3 and GLM 5.3 take
+low|high|max, GLM 5.2 takes high|max, and GLM never gets medium, none or minimal. A TEE model
+gets it only when the live catalog lists reasoning_effort for the model; voice=unset sends
+none (the model's own default). Each TEE call runs three clocks: the first data line must
+arrive within --first-data seconds (headers included); --timeout is the wall for the whole
+answer, per voice if you like (--timeout glm=900); and a gap of 120 s between data lines is
+logged, not enforced. Reasoning deltas count as data; the gateway's ": PROCESSING" heartbeats
+do not. A stopped call says which way it stopped: never started, stalled, still reasoning at
+the deadline, or still answering. Every streamed call records its stream counts and times
 (never reasoning text); every TEE call records the upstreams that served it (from its
-receipt); every call records its tokens and cost: the gateway's as billed, OpenAI's from
-OPENAI_PRICES. The report has a time-and-cost section, and stderr gives the run's time and
-cost before any partial-chorus or TEE warning.
+receipt); every call records its tokens and cost: the gateway's as billed, OpenAI's and
+Claude's from OPENAI_PRICES and CLAUDE_PRICES. The report has a time-and-cost section, and
+stderr gives the run's time and cost before any partial-chorus or TEE warning.
 
 SENSITIVITY, the routing ladder (a hard rule; --yes is your confirmation)
   public        published, or cleared for a public audience        → any voice
@@ -141,6 +155,8 @@ Usage:
   chorus.py --check-receipt rcpt-… --voices glm --sensitivity confidential  # after exit 5
   chorus.py --sensitivity internal --file d.md --model openai=sol --yes     # per-voice model
   chorus.py --sensitivity internal --file d.md --timeout glm=900 --effort glm=high --yes
+  chorus.py --sensitivity internal --file d.md --drafted-by claude --yes   # Claude helped write it
+  chorus.py --sensitivity internal --file d.md --model claude=sonnet --yes
   chorus.py --use-case contracts --file c.md --redact "Example Corp=COUNTERPARTY" --dry-run
   chorus.py --use-case code --sensitivity confidential --file change.diff --dry-run
   chorus.py --use-case copy --sensitivity public --file post.md --rewrites --dry-run
@@ -217,6 +233,10 @@ VOICES = {
                "key_env": "GEMINI_API_KEY", "api": "chat",
                "model": "gemini-4-argon", "tee": False,
                "default": False},  # opt-in: runs only when named in --voices
+    # Claude's ids are from Anthropic's models overview, read on 2026-10-25.
+    "claude": {"family": "Anthropic Claude", "base": "https://api.anthropic.com/v1",
+               "key_env": "ANTHROPIC_API_KEY", "api": "messages", "prefix": "claude-",
+               "model": "claude-opus-5-5", "tee": False},
 }
 
 # Short names accepted by --model voice=alias.
@@ -225,7 +245,17 @@ MODEL_ALIASES = {
     "glm": {"5.3": "z-ai/glm-5.3", "5.2": "z-ai/glm-5.2", "flash": "z-ai/glm-5.3-flash"},
     "kimi": {"k3": "moonshotai/kimi-k3"},
     "gemini": {"argon": "gemini-4-argon", "3.1-pro": "gemini-3.1-pro-preview"},
+    "claude": {"opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5",
+               "haiku": "claude-haiku-5-5", "fable": "claude-fable-5-1"},
 }
+
+# Anthropic's Messages API: the version header every call sends, and the beta that lets a
+# request the model's safeguards decline be answered by the Claude model Anthropic recommends
+# (fallbacks "default"), sent only to the models that take it (Claude Haiku 5.5 has none).
+ANTHROPIC_VERSION = "2026-10-21"
+CLAUDE_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+CLAUDE_FALLBACK_MODELS = ("claude-opus-5-5", "claude-sonnet-5-5", "claude-fable-5-1",
+                          "claude-opus-5")
 
 # --effort as a top-level reasoning_effort for the TEE models (never chat_template_kwargs or
 # thinking). Kimi K3 and GLM 5.3 take low|high|max and default to max (always thinking); GLM
@@ -237,6 +267,12 @@ KIMI_EFFORT = {"none": "low", "low": "low", "medium": "low", "high": "high",
                "xhigh": "max", "max": "max"}
 GLM_EFFORT = {"z-ai/glm-5.3": KIMI_EFFORT,
               "z-ai/glm-5.2": dict(KIMI_EFFORT, none="high", low="high", medium="high")}
+# --effort for Claude, as output_config.effort with adaptive thinking, by exact id: an id not
+# listed gets neither and runs at its own defaults. These take low|medium|high|xhigh|max, and
+# the chorus never turns their thinking off, so none asks for the least, low.
+CLAUDE_EFFORT = dict.fromkeys(
+    ("claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"),
+    dict(zip(EFFORTS, ("low", "low", "medium", "high", "xhigh", "max"))))
 
 SESSION_ID = re.compile(r"(?i)^(?:as_)?[0-9a-f]{64}$")  # the gateway's ids: 64 hex, as_ in its docs
 UPSTREAM_NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}\Z")
@@ -254,6 +290,14 @@ TIMEOUTS = (TimeoutError, socket.timeout)  # one class from Python 3.10, two bef
 OPENAI_PRICES = {"gpt-6.1-sol": (2.00, 0.10, 10.00), "gpt-6-astra": (10.00, 1.00, 50.00),
                  "gpt-6-luna": (0.10, 0.01, 0.50)}
 OPENAI_PRICED_UP_TO = 272000
+# Anthropic's standard prices in USD per million tokens (input, cache read, output, and the
+# longest prompt in tokens those prices cover), read on platform.claude.com/docs/en/about-claude/
+# pricing on 2026-10-25. Edit them here when they change. A model not listed, a longer prompt,
+# a cache write (the chorus asks for none) or an answer from a fallback model is unpriced.
+CLAUDE_PRICES = {"claude-opus-5-5": (4.00, 0.20, 20.00, 1000000),
+                 "claude-sonnet-5-5": (2.00, 0.10, 10.00, 1000000),
+                 "claude-haiku-5-5": (0.10, 0.01, 0.50, 100000),
+                 "claude-fable-5-1": (10.00, 0.25, 50.00, 1000000)}
 
 SENSITIVITY = {
     "public": "published, or cleared for a public audience",
@@ -948,10 +992,23 @@ def screen(label, text, secret_values, org_domains=()):
     return fmt(blocks), fmt(flags)
 
 
-def http(method, url, key, body=None, timeout=60):
+def anthropic_headers(key, beta=None):
+    """Anthropic's headers: the key as x-api-key (never a bearer token), the API version, and
+    any beta."""
+    headers = {"x-api-key": key, "anthropic-version": ANTHROPIC_VERSION}
+    if beta:
+        headers["anthropic-beta"] = beta
+    return headers
+
+
+def http(method, url, key, body=None, timeout=60, auth=None):
+    """One JSON request. `auth`: headers that carry the key in place of a bearer token
+    (Anthropic's)."""
     data = json.dumps(body).encode() if body is not None else None
     headers = {"Accept": "application/json"}
-    if key:
+    if auth:
+        headers.update(auth)
+    elif key:
         headers["Authorization"] = "Bearer " + key
     if data is not None:
         headers["Content-Type"] = "application/json"
@@ -1180,6 +1237,113 @@ def chat_stream(url, key, body, wall, first_data=FIRST_DATA_SECONDS, label="?"):
     return "".join(parts), finish, usage, hdrs, rid, st
 
 
+def messages_stream(url, auth, body, wall):
+    """POST a streaming Messages API request and rebuild the message from its events. Returns
+    (message, headers, stats). `wall` bounds the whole answer; ping events are heartbeats, not
+    data. Thinking deltas are counted, never kept. A stream that ends without message_stop is
+    an abort, not an answer."""
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers=dict(
+        auth, **{"Content-Type": "application/json", "Accept": "text/event-stream"}))
+    st, keys, t0 = new_stream_stats(), set(), time.monotonic()
+    since = lambda now=None: round((now if now is not None else time.monotonic()) - t0, 1)
+    try:
+        r = _OPENER.open(req, timeout=wall)
+    except urllib.error.URLError:
+        raise  # could not connect (nothing sent), or an HTTP error status: send() handles both
+    except TIMEOUTS:  # sent, and no headers within the wall
+        st["seconds"] = since()
+        raise StreamAborted(abort_message(st, since(), wall), None, None, st)
+    except (OSError, HTTPException) as e:
+        st["seconds"] = since()
+        raise StreamAborted("never started after %ds: the connection closed before any response "
+                            "(%s)" % (since(), type(e).__name__), None, None, st)
+    st["headers"] = since()
+    sock = getattr(getattr(r.fp, "raw", None), "_sock", None)
+    msg, blocks, usage, prev = {}, {}, {}, None
+    try:
+        while True:
+            left = t0 + wall - time.monotonic()
+            if left <= 0:
+                raise StreamAborted(abort_message(st, since(), wall), r.headers, msg.get("id"), st)
+            if sock is not None:  # a stall may not outlast the deadline
+                sock.settimeout(max(0.1, left))
+            raw = r.readline()
+            if not raw:
+                raise StreamAborted("the stream ended without finishing after %ss (no "
+                                    "message_stop; thinking %d, text %d data lines)" % (
+                                        since(), st["lines"]["reasoning"],
+                                        st["lines"]["content"]), r.headers, msg.get("id"), st)
+            line = raw.decode("utf-8", "replace").strip()
+            if not line.startswith("data:"):
+                continue  # event names and blank lines: each data line carries its own type
+            try:
+                obj = json.loads(line[5:].strip())
+            except ValueError:
+                obj = None
+            kind = obj.get("type") if isinstance(obj, dict) else None
+            if kind == "ping":
+                st["lines"]["heartbeat"] += 1
+                continue
+            now = time.monotonic()
+            if prev is not None:
+                st["max_gap"] = max(st["max_gap"], round(now - prev, 1))
+            prev, st["last_data"] = now, since(now)
+            if st["first_data"] is None:
+                st["first_data"] = st["last_data"]
+            line_kind = "other"
+            if kind == "error":
+                raise StreamAborted("the stream sent an error after %ss: %s" % (
+                    st["last_data"], http_error_message(json.dumps(obj))), r.headers,
+                    msg.get("id"), st)
+            if kind == "message_stop":
+                break
+            if kind == "message_start" and isinstance(obj.get("message"), dict):
+                msg, line_kind = dict(obj["message"]), "role"
+                if isinstance(msg.get("usage"), dict):
+                    usage.update(msg["usage"])
+            elif kind == "content_block_start" and isinstance(obj.get("content_block"), dict):
+                block = dict(obj["content_block"])
+                if block.get("type") == "thinking":
+                    block["thinking"] = ""  # never kept
+                blocks[obj.get("index")] = block
+            elif kind == "content_block_delta" and isinstance(obj.get("delta"), dict):
+                delta = obj["delta"]
+                keys.add(str(delta.get("type")))
+                block = blocks.get(obj.get("index"))
+                if delta.get("type") == "text_delta" and isinstance(delta.get("text"), str):
+                    if isinstance(block, dict):
+                        block["text"] = str(block.get("text") or "") + delta["text"]
+                    line_kind = "content"
+                    st["chars"]["content"] += len(delta["text"])
+                    st["last_content"] = st["last_data"]
+                elif delta.get("type") == "thinking_delta":
+                    line_kind = "reasoning"
+                    st["chars"]["reasoning"] += len(str(delta.get("thinking") or ""))
+                    st["last_reasoning"] = st["last_data"]
+                if line_kind != "other" and st["first_token"] is None:
+                    st["first_token"] = st["last_data"]
+            elif kind == "message_delta":
+                delta = obj.get("delta") if isinstance(obj.get("delta"), dict) else {}
+                for k in ("stop_reason", "stop_details"):
+                    if k in delta:
+                        msg[k] = delta[k]
+                if isinstance(obj.get("usage"), dict):
+                    usage.update(obj["usage"])
+            st["lines"][line_kind] += 1
+    except (OSError, HTTPException) as e:
+        if isinstance(e, TIMEOUTS):  # nothing came before the wall
+            raise StreamAborted(abort_message(st, since(), wall), r.headers, msg.get("id"), st)
+        raise StreamAborted("the stream broke off after %ss (%s; thinking %d, text %d data "
+                            "lines)" % (since(), type(e).__name__, st["lines"]["reasoning"],
+                                        st["lines"]["content"]), r.headers, msg.get("id"), st)
+    finally:
+        st["seconds"], st["delta_keys"] = since(), sorted(keys)
+        r.close()
+    order = sorted(blocks, key=lambda i: (not isinstance(i, int), i if isinstance(i, int) else 0))
+    msg["content"], msg["usage"] = [blocks[i] for i in order], usage
+    return msg, r.headers, st
+
+
 def collect_key(obj, name, out):
     if isinstance(obj, dict):
         if name in obj:
@@ -1364,6 +1528,36 @@ def openai_cost(model, usage):
     return round(((inp - cached) * price[0] + cached * price[1] + out * price[2]) / 1e6, 6)
 
 
+def messages_parts(resp):
+    """Text, stop reason and refusal category from a Messages API payload. Thinking blocks are
+    skipped, so their text is never kept."""
+    text = [str(b.get("text", "")) for b in resp.get("content") or []
+            if isinstance(b, dict) and b.get("type") == "text"]
+    details = resp.get("stop_details")
+    return "".join(text), resp.get("stop_reason"), (
+        details.get("category") if isinstance(details, dict) else None)
+
+
+def claude_cost(model, usage):
+    """A Messages call's cost in USD from CLAUDE_PRICES, or None when it cannot be priced: an
+    unlisted model, a prompt longer than its prices cover, or a cache write (its price depends
+    on how long it is kept). Anthropic's input_tokens exclude the cache reads and writes."""
+    price = CLAUDE_PRICES.get(model)
+    inp, out = usage.get("input_tokens"), usage.get("output_tokens")
+    read = usage.get("cache_read_input_tokens") or 0
+    write = usage.get("cache_creation_input_tokens") or 0
+    if not price or not all(isinstance(x, int) and x >= 0 for x in (inp, out, read, write)) or \
+            write or inp + read > price[3]:
+        return None
+    return round((inp * price[0] + read * price[1] + out * price[2]) / 1e6, 6)
+
+
+def claude_effort(model, level):
+    """The output_config.effort to send a Claude model for --effort `level`, or None to send
+    none (unset, or an id CLAUDE_EFFORT does not list)."""
+    return (CLAUDE_EFFORT.get(model) or {}).get(level)
+
+
 def chat_effort(model, level):
     """The reasoning_effort to send a chat model for --effort `level`, or None to send none."""
     if level == "unset":
@@ -1378,6 +1572,8 @@ def effort_sent(v, args, entry):
     level = v.get("effort", args.effort)
     if v["api"] == "responses":
         return None if level == "unset" else level
+    if v["api"] == "messages":
+        return claude_effort(v["model"], level)
     effort = chat_effort(v["model"], level)
     listed = "reasoning_effort" in ((entry or {}).get("supported_parameters") or [])
     return effort if effort and listed else None
@@ -1475,6 +1671,49 @@ def call_voice(v, key, system, user, cls, args, entry, schema, schema_name, pinn
             out["error"] = "response failed: %s %s" % (err.get("code"), err.get("message"))
         elif refusal and not text:
             out["error"] = "refused: " + refusal
+        return out
+    if v["api"] == "messages":
+        body = {"model": v["model"], "max_tokens": args.max_tokens, "stream": True,
+                "system": system, "messages": [{"role": "user", "content": user}],
+                "output_config": {"format": {"type": "json_schema", "schema": schema}}}
+        if v["model"] in CLAUDE_EFFORT:  # thinking stays on; effort sets how much
+            body["thinking"] = {"type": "adaptive"}
+        if effort:
+            body["output_config"]["effort"] = effort
+        beta = None
+        if v["model"] in CLAUDE_FALLBACK_MODELS:
+            body["fallbacks"], beta = "default", CLAUDE_FALLBACK_BETA
+        resp, hdrs, stats = messages_stream(v["base"] + "/messages", anthropic_headers(key, beta),
+                                            body, wall)
+        text, stop, category = messages_parts(resp)
+        usage = resp["usage"]
+        tokens = [usage.get(k) for k in ("input_tokens", "cache_read_input_tokens",
+                                         "cache_creation_input_tokens")]
+        details = usage.get("output_tokens_details")
+        iterations = usage.get("iterations") if isinstance(usage.get("iterations"), list) else []
+        switches = [b.get("to") for b in resp["content"] if b.get("type") == "fallback"]
+        fallback = "fallbacks" in body and bool(switches or any(
+            isinstance(x, dict) and x.get("type") == "fallback_message" for x in iterations))
+        named = [x.get("model") for x in switches if isinstance(x, dict)] + [resp.get("model")]
+        named = [m for m in named if isinstance(m, str) and m and m != v["model"]]
+        out = {"text": text, "headers": hdrs, "id": resp.get("id"), "effort": effort,
+               "stream": stats, "incomplete": "",
+               "answered_by": (named[0] if named else "an unnamed fallback model")
+               if fallback else None, "usage": {
+                   "input": sum(x for x in tokens if isinstance(x, int))
+                   if isinstance(tokens[0], int) else None,
+                   "output": usage.get("output_tokens"),
+                   "reasoning": details.get("thinking_tokens") if isinstance(details, dict)
+                   else None,
+                   "cost": None if fallback else claude_cost(v["model"], usage),
+                   "cost_from": None if fallback else "price table"}}
+        if stop == "refusal":  # whether a refusal is billed depends on its category: unpriced
+            out["error"] = ("refused by the model's safeguards (stop_reason refusal, category "
+                            "%s)%s" % (category or "none given", "; the fallback (%s) declined "
+                                       "too" % out["answered_by"] if fallback else ""))
+            out["answered_by"], out["usage"]["cost"], out["usage"]["cost_from"] = None, None, None
+        elif stop not in ("end_turn", "stop_sequence"):
+            out["incomplete"] = str(stop or "no stop reason")
         return out
     body = {"model": v["model"], "max_tokens": args.max_tokens, "stream": True,
             "messages": [{"role": "system", "content": system},
@@ -1948,6 +2187,8 @@ def send(name, v, key, system, user, cls, entry, args, schema, schema_name):
         r["usage"], r["incomplete"] = out["usage"], out["incomplete"]
         if out.get("stream"):
             r["stream"] = out["stream"]
+        if out.get("answered_by"):  # a Claude fallback model, not the one the plan named
+            r["answered_by"] = out["answered_by"]
         if v["tee"]:
             check_receipt(r, v, key, cls, out["headers"], out["id"])
         if out.get("error"):
@@ -2105,15 +2346,17 @@ def run_exam(name, v, key, items, draft, criteria, cls, entry, args, hats=None):
     return r
 
 
-def exam_items(results, agree):
+def exam_items(results, agree, drafters=()):
     """Findings no other family corroborated (same passage, same brief), most severe
-    first, numbered for round 2."""
+    first, numbered for round 2. Two drafting families (`drafters`, from --drafted-by) agreeing
+    with each other is no corroboration: one side of the pair must be another family."""
     def same_passage(f, h):
         (a, b), (c, d) = f["spans"][0], h["spans"][0]
         return a < d and c < b
 
     agreed = {id(f) for g in agree for n, f in g
-              if any(m != n and h["brief"] == f["brief"] and same_passage(f, h) for m, h in g)}
+              if any(m != n and not (n in drafters and m in drafters)
+                     and h["brief"] == f["brief"] and same_passage(f, h) for m, h in g)}
     items = [(n, f) for n, r in results.items() for f in r.get("findings") or []
              if id(f) not in agreed]
     items.sort(key=lambda nf: SEVERITY_ORDER[nf[1]["severity"]])
@@ -2122,12 +2365,16 @@ def exam_items(results, agree):
     return items[:MAX_EXAM], len(items) - min(len(items), MAX_EXAM)
 
 
-def apply_exam(items, exams):
-    """Attach each examiner's verdict to the finding and give it a status."""
+def apply_exam(items, exams, drafters=()):
+    """Attach each examiner's verdict to the finding and give it a status. A drafting family's
+    "refuted" defends its own draft, so it counts only as "disputed" (recorded as counts_as)."""
     for origin, f in items:
-        f["exam"] = {n: e["verdicts"][f["exam_id"]] for n, e in exams.items()
+        f["exam"] = {n: dict(e["verdicts"][f["exam_id"]]) for n, e in exams.items()
                      if n != origin and f["exam_id"] in (e.get("verdicts") or {})}
-        votes = [x["verdict"] for x in f["exam"].values()]
+        for n, x in f["exam"].items():
+            if n in drafters and x["verdict"] == "refuted":
+                x["counts_as"] = "disputed"
+        votes = [x.get("counts_as", x["verdict"]) for x in f["exam"].values()]
         if not votes:
             f["exam_status"] = "unexamined"
         elif all(x == "holds" for x in votes):
@@ -2532,7 +2779,8 @@ def cost_time(results, exams, rounds, seconds):
                           "seconds": r.get("seconds"), "first_token": st.get("first_token"),
                           "input": u.get("input"), "output": u.get("output"),
                           "reasoning": u.get("reasoning"), "cost": u.get("cost"),
-                          "cost_from": u.get("cost_from"), "failed": bool(r.get("error"))})
+                          "cost_from": u.get("cost_from"), "failed": bool(r.get("error")),
+                          "answered_by": r.get("answered_by")})
     for c in calls:
         c["cost"] = usd(c["cost"])
     known = [c["cost"] for c in calls if c["cost"] is not None]
@@ -2575,9 +2823,18 @@ def cost_lines(ct):
     if ct["unpriced"]:
         out.append("_Not in the total: %s (no usage came back, or no price; whether an aborted "
                    "call is billed is unconfirmed)._" % ", ".join(ct["unpriced"]))
-    if any(c["cost_from"] == "price table" for c in ct["calls"]):
-        out.append("_OpenAI's cost is priced from its tokens (OPENAI_PRICES, read 2026-10-22); "
-                   "the TEE gateway's is as billed._")
+    tables = ["%s cost is priced from its tokens (%s)" % (who, src) for who, prices, src in (
+        ("OpenAI's", OPENAI_PRICES, "OPENAI_PRICES, read 2026-10-22"),
+        ("Claude's", CLAUDE_PRICES, "CLAUDE_PRICES, read 2026-10-25"))
+        if any(c["cost_from"] == "price table" and c["model"] in prices for c in ct["calls"])]
+    if tables:
+        out.append("_%s; the TEE gateway's is as billed._" % "; ".join(tables))
+    fallbacks = ["%s (round %s) by %s" % (c["voice"], c["round"], c["answered_by"])
+                 for c in ct["calls"] if c.get("answered_by")]
+    if fallbacks:
+        out.append("_Answered by a fallback model after the requested model's safeguards "
+                   "declined, so not priced (the declined attempt may be billed too): %s._"
+                   % ", ".join(fallbacks))
     if any(str(c["model"]).startswith("moonshotai/") and c["output"] is not None
            and not c["reasoning"] for c in ct["calls"]):
         out.append("_The gateway reports no reasoning-token count for Kimi, so its output count "
@@ -2606,6 +2863,16 @@ def render(plan, results, agree, exams=None, items=None, dropped=0, ct=None):
             "%s ×%d" % (p, n) for p, n in plan["redactions"]))
     if plan.get("rewrites"):
         out.append("suggested wording: **on** (low-stakes copy, on the operator's word)")
+    drafters = plan.get("drafted_by") or []
+    mark = lambda n: "%s (drafting family)" % n if n in drafters else n
+    active = [n for n in drafters if usable(results.get(n) or {})]
+    if active:
+        out.append("drafting family: **%s** (helped write the draft: its findings count in full, "
+                   "its approval counts for less)" % ", ".join(active))
+    idle = [n for n in drafters if n not in active]
+    if idle:
+        out.append("drafted with help from **%s**, which did not review in this run: nothing of "
+                   "it to discount" % ", ".join(idle))
     out.append("")
     for r in results.values():
         bits = "%s @ %s" % (r["model"], r["host"])
@@ -2619,51 +2886,60 @@ def render(plan, results, agree, exams=None, items=None, dropped=0, ct=None):
             bits += ", effort %s" % (r["effort"] or "none sent")
         if r.get("hats"):
             bits += ", wearing %s" % " + ".join(r["hats"])
+        if r.get("answered_by"):
+            bits += ", answered by %s (a fallback after the safeguards declined)" % r["answered_by"]
+        if r["voice"] in drafters:
+            bits += ", drafting family"
         out.append("- **%s** (%s): %s" % (r["voice"], r["family"], bits))
     out.append("")
     if agree:
         out += ["## Same passage flagged by several families (issues may differ)", ""]
         for g in agree:
             names = sorted({n for n, _ in g})
-            label = " + ".join(names)
+            label = " + ".join(map(mark, names))
             if any(f.get("hat") for _, f in g):
-                label = " + ".join("%s (%s)" % (n, ", ".join(sorted(
+                label = " + ".join("%s (%s)" % (mark(n), ", ".join(sorted(
                     {f.get("hat") or "?" for m, f in g if m == n}))) for n in names)
             spread = hat_spread(g)
-            out.append("**%s**%s — \"%s\"" % (
+            out.append("**%s**%s%s — \"%s\"" % (
                 label, " · %d different hats" % spread if spread > 1 else "",
+                " · drafting families only: no corroboration" if all(n in drafters
+                                                                    for n in names) else "",
                 g[0][1]["quote"][:160]))
             for n, f in g:
                 out.append("  - %s: [%s][%s]%s %s" % (
-                    n, f["severity"].upper(), f["brief"],
+                    mark(n), f["severity"].upper(), f["brief"],
                     "[%s]" % f["hat"] if f.get("hat") else "", f["issue"]))
             out.append("")
     if items:
         order = {"held": 0, "disputed": 1, "unexamined": 2, "refuted": 3}
         out += ["## Cross-examination of findings only one family raised", "",
                 "Each finding went, anonymized, to the other families, who checked it against "
-                "the draft.", ""]
+                "the draft." + (" Two drafting families agreeing is no corroboration, so their "
+                                "shared findings are here too." if len(active) > 1 else ""), ""]
         for origin, f in sorted(items, key=lambda nf: (order[nf[1].get("exam_status",
                                                                          "unexamined")],
                                                         SEVERITY_ORDER[nf[1]["severity"]])):
             out.append("**%s** · [%s][%s] (%s) \"%s\" — %s" % (
                 f.get("exam_status", "unexamined"), f["severity"].upper(), f["brief"],
-                "%s as %s" % (origin, f["hat"]) if f.get("hat") else origin,
+                "%s as %s" % (mark(origin), f["hat"]) if f.get("hat") else mark(origin),
                 f["quote"][:120], f["issue"]))
             for n, x in (f.get("exam") or {}).items():
-                out.append("  - %s: %s — %s" % (n, x["verdict"], x["reason"]))
+                out.append("  - %s: %s%s — %s" % (
+                    mark(n), x["verdict"], " (counts as %s)" % x["counts_as"]
+                    if x.get("counts_as") else "", x["reason"]))
         if dropped:
             out.append("_%d lower-severity single-family finding(s) were not cross-examined "
                        "(cap %d)._" % (dropped, MAX_EXAM))
         for n, e in (exams or {}).items():
             if e.get("error"):
-                out.append("_%s could not cross-examine: %s_" % (n, e["error"]))
+                out.append("_%s could not cross-examine: %s_" % (mark(n), e["error"]))
             if e.get("receipt_detail"):
-                out.append("_%s round-2 TEE: %s_" % (n, e["receipt_detail"]))
+                out.append("_%s round-2 TEE: %s_" % (mark(n), e["receipt_detail"]))
         out.append("")
     out += ["## By voice", ""]
     for r in results.values():
-        out.append("### %s — %s" % (r["voice"], r["model"]))
+        out.append("### %s — %s" % (mark(r["voice"]), r["model"]))
         if r.get("receipt_detail"):
             out.append("_TEE: %s_" % r["receipt_detail"])
         if r.get("stream"):
@@ -2681,7 +2957,10 @@ def render(plan, results, agree, exams=None, items=None, dropped=0, ct=None):
             out.append("**Overall:** %s" % r["overall"])
         out += [fmt_finding(f) for f in r["findings"]] or ["- (no findings)"]
         if r.get("pass"):
-            out.append("PASS: %s" % ", ".join(r["pass"]))
+            out.append("PASS: %s%s" % (", ".join(r["pass"]), " (tells: weak evidence, since this "
+                                       "family helped write the draft)" if r["voice"] in drafters
+                                       and "tells" in [str(b).strip().lower() for b in r["pass"]]
+                                       else ""))
         u = r.get("usage") or {}
         out += ["_tokens: in %s · out %s%s · %ss%s_" % (
             u.get("input"), u.get("output"),
@@ -2699,6 +2978,13 @@ def render(plan, results, agree, exams=None, items=None, dropped=0, ct=None):
             "model that helped write the draft, that disagreement is itself a finding: surface "
             "it, never average it away. Relay the quoted line and the issue; the author makes "
             "any change in their own words."]
+    if active:
+        out += ["", "The drafting family (%s) helped write this draft and may favour it. Its "
+                "findings count in full; its approval counts for less: its pass on tells is weak "
+                "evidence%s%s." % (", ".join(active), ", and its \"refuted\" in round 2 counts "
+                                   "only as \"disputed\"" if exams else "",
+                                   "; two drafting families agreeing is no corroboration"
+                                   if len(active) > 1 else "")]
     if plan.get("use_case"):
         out += ["", "Each finding carries the hat it was raised under. The same passage flagged by "
                 "different families wearing different hats is the strongest signal. The same "
@@ -2741,13 +3027,15 @@ def parse_args(argv):
                          "fit is added when --criteria is given)" % ", ".join(BRIEFS))
     ap.add_argument("--model", action="append", default=[],
                     help="per-voice model override, voice=model or voice=alias "
-                         "(repeatable; kimi/glm stay within their own family)")
+                         "(repeatable; kimi, glm and claude stay within their own family)")
     ap.add_argument("--effort", action="append", default=[], metavar="[VOICE=]LEVEL",
                     help="reasoning effort, %s (default high); repeat as voice=level for one "
                          "voice, where voice=unset sends none (the model's own default). Sent "
-                         "as is to OpenAI (none only on gpt-6-luna); for Kimi K3 and GLM 5.3 "
-                         "none/low/medium → low, high → high, xhigh/max → max; GLM 5.2 takes "
-                         "high or max only" % "|".join(EFFORTS))
+                         "as is to OpenAI (none only on gpt-6-luna) and to Claude for the ids in "
+                         "CLAUDE_EFFORT (none → low: its thinking stays on); for Kimi K3 and GLM "
+                         "5.3 none/low/medium → low, high → high, xhigh/max → max; GLM 5.2 takes "
+                         "high or max only"
+                         % "|".join(EFFORTS))
     ap.add_argument("--max-tokens", type=int, default=32000,
                     help="per-voice output budget, reasoning included (default 32000)")
     ap.add_argument("--timeout", action="append", default=[], metavar="[VOICE=]SECONDS",
@@ -2805,6 +3093,13 @@ def parse_args(argv):
     ap.add_argument("--allow-flagged", action="store_true",
                     help="send despite contact/financial flags in the draft; only on the "
                          "operator's word, after they have checked each flagged line")
+    ap.add_argument("--drafted-by", default="", metavar="VOICE[,VOICE]",
+                    help="the voice(s) whose model family helped write the draft, from: %s. "
+                         "That family still reviews in both rounds and its findings count in "
+                         "full, but its approval counts for less: the report labels it the "
+                         "drafting family, its pass on the tells brief is shown as weak "
+                         "evidence, and its round-2 'refuted' counts as 'disputed'. Two drafting "
+                         "families agreeing is no corroboration" % ", ".join(VOICES))
     ap.add_argument("--no-cross-examine", dest="cross_examine", action="store_false",
                     help="skip round 2 (other families checking each single-family finding)")
     ap.add_argument("--json", action="store_true",
@@ -2856,6 +3151,11 @@ def parse_args(argv):
         merged = args.upstreams.setdefault(n.strip(), [])
         merged += [x for x in names if x not in merged]
     args.first_data = seconds(args.first_data)
+    args.drafted_by = list(dict.fromkeys(n.strip() for n in args.drafted_by.split(",")
+                                         if n.strip()))
+    for n in args.drafted_by:
+        if n not in VOICES:
+            die(1, "--drafted-by: unknown voice %r (known: %s)" % (n, ", ".join(VOICES)))
     if args.max_tokens <= 0:
         die(1, "--max-tokens must be positive")
     return args
@@ -2987,6 +3287,8 @@ def plan_effort(v):
     level = v.get("effort", "high")
     if v["api"] == "responses":
         return "none sent" if level == "unset" else level
+    if v["api"] == "messages":
+        return claude_effort(v["model"], level) or "none sent"
     effort = chat_effort(v["model"], level)
     return "%s if the catalog lists it" % effort if effort else "none sent"
 
@@ -2994,12 +3296,14 @@ def plan_effort(v):
 def list_models(voices, names):
     hosts = {}
     for n in names or list(VOICES):
-        hosts.setdefault(voices[n]["base"], voices[n]["key_env"])
-    for base, key_env in hosts.items():
+        hosts.setdefault(voices[n]["base"], (voices[n]["key_env"], voices[n]["api"]))
+    for base, (key_env, api) in hosts.items():
         key = os.environ.get(key_env, "")
         print("## %s%s" % (base, "" if key else "  (%s not set; trying unauthenticated)" % key_env))
         try:
-            data = http("GET", base + "/models", key, timeout=30)[0]
+            data = http("GET", base + "/models" + ("?limit=1000" if api == "messages" else ""),
+                        key, timeout=30,
+                        auth=anthropic_headers(key) if api == "messages" and key else None)[0]
         except Exception as e:
             print("model-list failed (%s): %s\n" % (type(e).__name__, e))
             continue
@@ -3014,6 +3318,8 @@ def list_models(voices, names):
             print("%s%s" % (m.get("id", "?"), ("   " + " ".join(extra)) if extra else ""))
         if not rows:
             print(json.dumps(data, indent=1)[:2000])
+        if data.get("has_more"):  # Anthropic's list is paged; one page of 1000 is shown
+            print("(the host lists more models than this page shows)")
         print()
 
 
@@ -3222,6 +3528,8 @@ def main(argv=None):
         plan["redactions"] = redactions
     if args.redacted:
         plan["redacted_by_operator"] = True
+    if args.drafted_by:
+        plan["drafted_by"] = list(args.drafted_by)
     print("chorus → sensitivity=%s (%s) · briefs=%s · draft %d chars" % (
         cls, SENSITIVITY[cls], ",".join(briefs), len(draft)), file=sys.stderr)
     note = (uc or {}).get("class_note", {}).get(cls)
@@ -3249,6 +3557,11 @@ def main(argv=None):
             file=sys.stderr)
     for msg in plan_rows:
         print("  " + msg, file=sys.stderr)
+    for n in args.drafted_by:
+        print("  drafting family: %s (%s, %s) helped write the draft: its findings count in "
+              "full, its approval for less" % (n, voices[n]["family"], "in the plan"
+                                               if n in runnable else "not in this run"),
+              file=sys.stderr)
     for label, root in cfg["never_send"]:
         if label.startswith("CHORUS_NEVER_SEND") and not any(
                 os.path.lexists(r) for _, r in _roots([(label, root)])):
@@ -3410,11 +3723,14 @@ def main(argv=None):
     rounds["1"] = round(time.monotonic() - t_round)
     results.update(refused_tee)
 
+    for n in args.drafted_by:
+        if n in results:
+            results[n]["drafting_family"] = True
     agree = agreements(results)
     good = [n for n, r in results.items() if usable(r)]
     exams, items, dropped = {}, [], 0
     if args.cross_examine and len(good) >= 2:
-        items, dropped = exam_items(results, agree)
+        items, dropped = exam_items(results, agree, args.drafted_by)
         held = {n for n, r in results.items() if voices[n]["tee"] and r.get("sent") and (
             r.get("receipt") == "failed" or (cls == "confidential"
                                              and r.get("receipt") != "verified"))}
@@ -3444,7 +3760,7 @@ def main(argv=None):
                 os._exit(5 if any(voices[n]["tee"] for n in examiners) else 4)
             pool.shutdown(wait=False)
             rounds["2"] = round(time.monotonic() - t_round)
-            apply_exam(items, exams)
+            apply_exam(items, exams, args.drafted_by)
 
     try:  # a report that cannot be drawn must not skip the receipt and exit-code checks below
         ct = cost_time(results, exams, rounds, round(time.monotonic() - t_run))
