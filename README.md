@@ -23,6 +23,7 @@ flowchart TD
         V1[OpenAI]
         V2[Kimi, in a TEE]
         V3[GLM, in a TEE]
+        V4[Claude]
     end
     R1 --> A[Passages several families flagged]
     R1 --> F[Findings no other family corroborated]
@@ -42,6 +43,17 @@ flowchart TD
 6. **Receipts.** Every call to a TEE voice is checked against its attestation receipt (below).
 7. **Report.** Markdown on stdout (or, with `--json`, JSON with the report inside), including a time-and-cost table.
 
+## When a model helped write the draft
+
+A model tends to rate its own family's writing more kindly than other families do. If the draft was written with a model's help, name that model's voice with `--drafted-by` (for example `--drafted-by claude`, or a comma list). That family still reviews in both rounds, and its findings count in full: a problem it flags in a draft it helped write is worth hearing, and it corroborates another family's finding like any other family. Only its approval counts for less:
+
+- the report labels it the drafting family: in the header, on its voice line, in its own review, and wherever it is named as a finding's source or examiner (`--json` marks its result `drafting_family`);
+- its pass on the `tells` brief is shown as weak evidence, since a model is likely to miss the habits of its own family's writing;
+- its "refuted" in round 2 counts only as "disputed" (`--json` records `counts_as`);
+- when you name two drafting families, their agreeing with each other is no corroboration: such a finding still goes to round 2.
+
+A family you name that does not review in the run is noted in the header and changes nothing else. A coding agent that helped write the draft should name its own family.
+
 ## Use cases and hats
 
 A use case gives every voice a role, a "hat", for one kind of document. Five ship with the tool, each one TOML file in `use_cases/`. You can add your own without touching the code: see [use_cases/README.md](use_cases/README.md).
@@ -56,7 +68,7 @@ A use case gives every voice a role, a "hat", for one kind of document. Five shi
 
 For contracts, mark your own side by redacting your organization's name to `[CLIENT]` (`--redact "Your Org=CLIENT"`); the counterparty becomes `[COUNTERPARTY]` or `[PARTY-1]`. The `--redact` terms are the very names you are hiding, so they sit in your shell history and in any command you paste. Keep them out of shared logs and issues, or hand-redact a copy and pass `--redacted` instead.
 
-**How hats are dealt.** Every hat is worn on every run. A seeded shuffle deals the hats over the voices that will run, so when there are more hats than voices, a voice wears several. The seed defaults to a hash of the use case, the draft and the local date: a `--yes` run on the same local date deals exactly as the dry run before it did (pass the seed the dry run printed, with `--seed`, to hold the deal past midnight), and who wears which hat rotates across drafts and days. `--seed` holds a deal; `--hats kimi=vc` pins one. If a TEE voice is refused at the attestation check before anything is sent, its hats are dealt again over the voices that remain. The report records the seed, the pins and the voice-to-hat map, and tags every finding with its hat. Round 2 keeps the hats, so each examiner judges as its own roles. The strongest signal in a report is the same passage flagged by different families wearing different hats.
+**How hats are dealt.** Every hat is worn on every run. A seeded shuffle deals the hats over the voices that will run, so when there are more hats than voices, a voice wears several, and when there are more voices than hats, two voices share one. The seed defaults to a hash of the use case, the draft and the local date: a `--yes` run on the same local date deals exactly as the dry run before it did (pass the seed the dry run printed, with `--seed`, to hold the deal past midnight), and who wears which hat rotates across drafts and days. `--seed` holds a deal; `--hats kimi=vc` pins one. If a TEE voice is refused at the attestation check before anything is sent, its hats are dealt again over the voices that remain. The report records the seed, the pins and the voice-to-hat map, and tags every finding with its hat. Round 2 keeps the hats, so each examiner judges as its own roles. The strongest signal in a report is the same passage flagged by different families wearing different hats.
 
 Without a use case, the tool runs plain briefs with no roles. By default these are refute, tells and redteam (refute and redteam at confidential), plus fit when you pass `--criteria`. `--brief` picks your own from refute, tells, redteam and fit, or `all`.
 
@@ -80,8 +92,11 @@ A use case allowed only at `confidential` implies it. No other level is ever imp
 | `kimi` | Kimi K3 (open weights) | Phala's gateway; TEE serving checked on every call | `PHALA_API_KEY` |
 | `glm` | GLM 5.3 (open weights) | Phala's gateway; TEE serving checked on every call | `PHALA_API_KEY` |
 | `gemini` | Gemini (opt-in: runs only when named in `--voices`) | generativelanguage.googleapis.com | `GEMINI_API_KEY` |
+| `claude` | Claude Opus 5.5 (`--model claude=sonnet`, `haiku` or `fable` for the others) | api.anthropic.com | `ANTHROPIC_API_KEY` |
 
-The OpenAI and Gemini voices are ordinary API calls, covered by those providers' own data terms. OpenAI calls are sent with `store: false`.
+The OpenAI, Claude and Gemini voices are ordinary API calls, covered by those providers' own data terms. OpenAI calls are sent with `store: false`.
+
+The Claude voice uses Anthropic's Messages API, streamed, with a JSON schema for its answer, adaptive thinking and `output_config.effort`. On the models that take it, it also asks for Anthropic's server-side fallback (`fallbacks: "default"`): if the model's safeguards decline a review, the Claude model Anthropic recommends for that kind of refusal, if there is one, answers instead. The report names the model that answered, and leaves that call unpriced, since the declined attempt may be billed too.
 
 The two open-weight models run through Phala's gateway, which can serve them inside trusted execution environments (TEEs). The tool checks that on every call to a TEE voice, at every sensitivity. Each call:
 
@@ -107,15 +122,16 @@ export CHORUS_CONFIDENTIAL_UPSTREAMS="glm=upstream-a,upstream-b;kimi=upstream-c"
 
 ## Cost and time
 
-**Cost.** In five live test runs of this design on synthetic drafts (October 2026), a three-voice review cost about $0.09 to $0.13. Your cost depends on the draft's length, the reasoning effort and current prices. Every report includes a table of each call's tokens and cost, and a run total: the gateway reports its own cost per call, and OpenAI's is priced from its tokens using the price table at the top of `chorus.py` (read 2026-10-22; update it when prices change).
+**Cost.** In five live test runs of this design on synthetic drafts (October 2026), a three-voice review cost about $0.09 to $0.13. Your cost depends on the draft's length, the reasoning effort and current prices. Those runs had no Claude voice; it adds its own tokens at its own prices. Every report includes a table of each call's tokens and cost, and a run total: the gateway reports its own cost per call, and OpenAI's and Claude's are priced from their tokens using the price tables at the top of `chorus.py` (`OPENAI_PRICES`, read 2026-10-22, and `CLAUDE_PRICES`, read 2026-10-25; update them when prices change).
 
-**Time.** A run takes a few minutes, and the TEE reasoning models set the pace. In the same tests, a GLM review took 3 to 5 minutes. Reasoning effort matters a great deal: in later tests on a 15,000-character draft, a GLM review on one upstream took 41 seconds at effort high and 141 seconds with no effort set, and with no effort set two slower upstreams took 13 and 17 minutes. The default is `--effort high`. Each TEE call (Kimi, GLM) has three clocks: the first data must arrive within 180 seconds (`--first-data`), the whole answer within 540 seconds (`--timeout`, per voice if you like), and a gap of 120 seconds between data lines is logged. The OpenAI and Gemini calls are bounded by `--timeout` alone. Run a `--yes` run in the background.
+**Time.** A run takes a few minutes, and the TEE reasoning models set the pace. In the same tests, a GLM review took 3 to 5 minutes. Reasoning effort matters a great deal: in later tests on a 15,000-character draft, a GLM review on one upstream took 41 seconds at effort high and 141 seconds with no effort set, and with no effort set two slower upstreams took 13 and 17 minutes. The default is `--effort high`. Each TEE call (Kimi, GLM) has three clocks: the first data must arrive within 180 seconds (`--first-data`), the whole answer within 540 seconds (`--timeout`, per voice if you like), and a gap of 120 seconds between data lines is logged. The OpenAI, Claude and Gemini calls are bounded by `--timeout` alone. Run a `--yes` run in the background.
 
 ## Setup
 
 You need macOS or Linux (on Windows, use WSL), Python 3.11 or later (macOS's built-in `/usr/bin/python3` is too old; use a current Python from python.org or a package manager), and at least one key:
 
 - an OpenAI API key, billed per call;
+- an Anthropic API key, billed per call;
 - a Phala API key, for the two TEE voices;
 - optionally a Gemini key.
 
@@ -138,7 +154,7 @@ python3 chorus.py --list-use-cases
 The `examples/` folder holds a synthetic grant application with problems planted in it, and the invented funder's call it answers ([examples/README.md](examples/README.md) lists the planted problems). A dry run shows exactly what would be sent where, and sends nothing. It checks no key with any provider, but it plans only the voices whose key variable is set, so any placeholder value will do:
 
 ```bash
-OPENAI_API_KEY=x PHALA_API_KEY=x python3 chorus.py --use-case grant --sensitivity internal --file examples/grant-application.md --criteria examples/funder-call.md --seed demo --dry-run
+OPENAI_API_KEY=x ANTHROPIC_API_KEY=x PHALA_API_KEY=x python3 chorus.py --use-case grant --sensitivity internal --file examples/grant-application.md --criteria examples/funder-call.md --seed demo --dry-run
 ```
 
 ```text
@@ -149,7 +165,8 @@ chorus → sensitivity=internal (not public yet, but cleared to go to the fronti
   openai  gpt-6.1-sol @ api.openai.com · effort high · wall 540s
   kimi    moonshotai/kimi-k3 @ inference.phala.com  [TEE: checked before send] · effort high if the catalog lists it · wall 540s
   glm     z-ai/glm-5.3 @ inference.phala.com  [TEE: checked before send] · effort high if the catalog lists it · wall 540s
-  hats: openai = impact-evaluator; kimi = program-officer; glm = budget-reviewer (seed demo, --seed); pin with --hats voice=hat, fix with --seed
+  claude  claude-opus-5-5 @ api.anthropic.com · effort high · wall 540s
+  hats: openai = program-officer; kimi = program-officer; glm = impact-evaluator; claude = budget-reviewer (seed demo, --seed); pin with --hats voice=hat, fix with --seed
 dry run: guards passed; nothing sent.
 ```
 
@@ -161,7 +178,7 @@ python3 chorus.py --use-case grant --sensitivity internal --file examples/grant-
 
 The report has these sections:
 
-- a header with the sensitivity, the briefs, the hat deal and its seed, and each voice's model, host, receipt status, serving upstream and hats;
+- a header with the sensitivity, the briefs, the hat deal and its seed, the drafting family if you named one, and each voice's model, host, receipt status, serving upstream and hats;
 - **Same passage flagged by several families**: each passage, the families and hats that flagged it, and their issues;
 - **Cross-examination of findings only one family raised**: each finding tagged held, disputed, refuted or unexamined, with every examiner's verdict and reason;
 - **By voice**: each voice's overall verdict and findings, as `[SEVERITY][brief][hat][exam status] "quote" — issue → kind of change`, with a warning on any quote not found in the draft;
@@ -184,19 +201,20 @@ Treat any other outcome of a `--yes` run, such as a traceback or a killed proces
 
 ## Using it from a coding agent
 
-The tool is attended-only. An agent may run `--dry-run`, which sends nothing, to show you the plan. Every send needs your confirmation of the sensitivity for that run, and the `--yes` run repeats the confirmed dry run's flags exactly. An agent should never add `--yes`, `--allow-flagged`, `--redacted` or `--rewrites` on its own judgment: each is the operator's word. Don't wire it into unattended automation.
+The tool is attended-only. An agent may run `--dry-run`, which sends nothing, to show you the plan. Every send needs your confirmation of the sensitivity for that run, and the `--yes` run repeats the confirmed dry run's flags exactly. An agent should never add `--yes`, `--allow-flagged`, `--redacted` or `--rewrites` on its own judgment: each is the operator's word. An agent that helped write the draft should add `--drafted-by` with its own family. Don't wire it into unattended automation.
 
 ## Limitations
 
 - **Findings are leads for a person to check.** The contracts use case is not legal advice, and the startup and grant use cases do not replace diligence.
-- **The evidence is early.** The first pre-registered evaluation, unpublished, ran on about 15,000 characters of real web copy, in one run, with one of the three voices timing out. The chorus caught 5 of the 6 known weaknesses that the text alone could show (9 were pre-registered in all), but fewer than 60% of its findings were upheld by both of two judges. A single strong model reviewing blind with the same prompts, in more seats, found issues the chorus missed; the judges were from that model's family, which may favour it. In a reading done after the fact, round 2 looked like a useful filter, so read the held and corroborated findings first.
+- **The evidence is early.** The first pre-registered evaluation, unpublished, ran on about 15,000 characters of real web copy, in one run, with one of the three voices timing out. The chorus caught 5 of the 6 known weaknesses that the text alone could show (9 were pre-registered in all), but fewer than 60% of its findings were upheld by both of two judges. A single strong model reviewing blind with the same prompts, in more seats, found issues the chorus missed; the judges were from that model's family, which may favour it. That family now has a voice here (`claude`), so its findings are cross-examined and count toward agreement like any other's; whether it does as well in one seat has not been measured. In a reading done after the fact, round 2 looked like a useful filter, so read the held and corroborated findings first.
 - **You classify the content.** The guards are pattern-based. They catch common credential shapes and personal identifiers, not everything, and they can flag harmless text.
 - **`--redact` helps, and it can miss things.** It folds case, accents, spacing and common joins, and the plan notes near-misses. Read every note, and hand-redact a scratch copy (then pass `--redacted`) for anything it cannot handle cleanly.
 - **The report quotes your draft.** Treat it with the draft's sensitivity.
 - **TEE proof rests on the gateway's receipts**, receipts are sometimes not stored, and confidential runs need an upstream allowlist you choose.
 - **The TEE reasoning models are slow and uneven.** A voice that times out after sending loses its hats for that run; the report shows the voice as failed.
-- **Round 2 counts corroboration strictly.** A finding is corroborated only when another family flagged the same passage under the same brief; a passage flagged under different briefs is listed as an agreement and still cross-examined.
-- **Model ids and prices are dated** (October 2026). Update `VOICES`, `MODEL_ALIASES`, `KIMI_EFFORT` and `GLM_EFFORT` (effort is mapped by exact model id, so a new id gets none until it is added) and `OPENAI_PRICES` in `chorus.py` as providers change them. The Gemini model id has not been checked against a live catalog: run `--list-models --voices gemini` first.
+- **Round 2 counts corroboration strictly.** A finding is corroborated only when another family flagged the same passage under the same brief (two drafting families do not corroborate each other); a passage flagged under different briefs is listed as an agreement and still cross-examined.
+- **`--drafted-by` is a label and a discount, not a cure.** It cannot take a family's preference for its own writing out of its review. It marks that family's tells pass as weak and softens its round-2 "refuted"; its other passes and its overall verdict are printed as given, so weigh them knowing who helped write the draft. A model that helped write the draft but is not named this way counts in full.
+- **Model ids and prices are dated** (October 2026). Update `VOICES`, `MODEL_ALIASES`, `KIMI_EFFORT`, `GLM_EFFORT` and `CLAUDE_EFFORT` (effort is mapped by exact model id, so a new id gets none until it is added), `OPENAI_PRICES` and `CLAUDE_PRICES`, and the Anthropic API version and fallback settings (`ANTHROPIC_VERSION`, `CLAUDE_FALLBACK_BETA`, `CLAUDE_FALLBACK_MODELS`) in `chorus.py` as providers change them. The Gemini model id has not been checked against a live catalog: run `--list-models --voices gemini` first.
 - **The TEE voices depend on one gateway** and its API for catalogs, sessions and receipts.
 - **macOS and Linux only.** The never-send guard relies on POSIX paths and the passwd database.
 

@@ -114,7 +114,8 @@ class UseCaseHatTests(ChorusCase):
         for name, uc in cases.items():
             keys = list(uc["hats"])
             for voices in (["kimi", "glm"], ["openai", "kimi", "glm"],
-                           ["openai", "kimi", "glm", "gemini"], ["kimi"]):
+                           ["openai", "kimi", "glm", "gemini"], ["kimi"],
+                           ["openai", "kimi", "glm", "claude"]):
                 for seed in range(30):
                     dealt, unworn = chorus.deal_hats(keys, voices, seed)
                     label = "%s %s %s" % (name, voices, seed)

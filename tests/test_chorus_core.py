@@ -349,7 +349,8 @@ class ReadmeExampleTest(ChorusCase):
 
     def test_readme_example_dry_run_matches_the_readme(self):
         root, env, argv, shown = self.readme_example()
-        self.assertEqual(env, {"OPENAI_API_KEY": "x", "PHALA_API_KEY": "x"})
+        self.assertEqual(env, {"OPENAI_API_KEY": "x", "ANTHROPIC_API_KEY": "x",
+                               "PHALA_API_KEY": "x"})
         opened = []
 
         class NoNetwork:  # the real voices' hosts are never dialled from a test
@@ -357,7 +358,7 @@ class ReadmeExampleTest(ChorusCase):
                 opened.append(req.full_url)
                 raise urllib.error.URLError("no network in tests")
 
-        # a reader's shell: the command's two variables, a scratch HOME, nothing else set
+        # a reader's shell: the command's three variables, a scratch HOME, nothing else set
         shell = dict(env, HOME=self.home, PATH=os.environ.get("PATH", ""), no_proxy="*")
         here = os.getcwd()
         with mock.patch.object(chorus, "VOICES", copy.deepcopy(REAL_VOICES)), \
