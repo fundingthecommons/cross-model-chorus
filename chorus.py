@@ -113,6 +113,12 @@ SENSITIVITY, the routing ladder (a hard rule; --yes is your confirmation)
                                                                        upstreams, zero retention
                                                                        requested, every receipt
                                                                        verified
+FRONTIER VOICES AT CONFIDENTIAL. CHORUS_CONFIDENTIAL_FRONTIER (voice[,voice]) lists frontier
+voices you approve for confidential content too, for example a provider your own tools
+already send that material to. None ships approved. A listed voice joins confidential runs
+like any voice (Gemini still only when named), but it gets the draft in plaintext at its
+provider's API under that provider's terms: no enclave, no receipt, no zero-retention
+request. The plan, the STOP line and the report name it. The TEE voices keep every check.
 The tool cannot classify your content. YOU declare --sensitivity. A use case allowed only
 at confidential implies it; no other level is ever implied. Reviewers get the DRAFT ONLY
 (plus, optionally, a funder's PUBLIC call via --criteria), never your source material or
@@ -537,6 +543,27 @@ def upstream_allowlist(spec):
     return {n: tuple(names) for n, names in out.items()}
 
 
+def frontier_allowlist(spec):
+    """CHORUS_CONFIDENTIAL_FRONTIER → (voice, ...): the frontier voices the operator approves
+    for confidential content, which they get in plaintext at their provider's API, outside
+    any enclave and with no receipt. Names are separated by commas, ';' or whitespace. Exits
+    on an unknown voice, or a TEE voice (its upstreams are approved in
+    CHORUS_CONFIDENTIAL_UPSTREAMS instead)."""
+    out = []
+    for n in re.split(r"[,;\s]+", spec or ""):
+        if not n:
+            continue
+        if n not in VOICES:
+            die(1, "CHORUS_CONFIDENTIAL_FRONTIER: unknown voice %r (frontier voices: %s)" % (
+                n, ", ".join(k for k, v in VOICES.items() if not v["tee"])))
+        if VOICES[n]["tee"]:
+            die(1, "CHORUS_CONFIDENTIAL_FRONTIER: %r is a TEE voice; approve its upstreams in "
+                   "CHORUS_CONFIDENTIAL_UPSTREAMS instead" % n)
+        if n not in out:
+            out.append(n)
+    return tuple(out)
+
+
 def path_list(spec, expand=True):
     """An os.pathsep-separated list of paths, empty entries dropped; ~ expanded unless
     `expand` is false (never-send entries keep it, so every home is checked)."""
@@ -572,7 +599,8 @@ def load_config(args, environ=None):
     """The run's configuration, from the flags and the environment. When --env-file or
     CHORUS_ENV_FILE names a dotenv file, it is loaded first, never overriding a variable
     already set. Returns {env_file, secret_values (for the guards), never_send [(label,
-    path)], confidential_upstreams {voice: names}, org_email_domains, use_case_dirs}."""
+    path)], confidential_upstreams {voice: names}, confidential_frontier (voices),
+    org_email_domains, use_case_dirs}."""
     environ = os.environ if environ is None else environ
     env_file = getattr(args, "env_file", None) or environ.get("CHORUS_ENV_FILE") or None
     pairs = []
@@ -605,6 +633,8 @@ def load_config(args, environ=None):
             "never_send": never,
             "confidential_upstreams": upstream_allowlist(
                 environ.get("CHORUS_CONFIDENTIAL_UPSTREAMS")),
+            "confidential_frontier": frontier_allowlist(
+                environ.get("CHORUS_CONFIDENTIAL_FRONTIER")),
             "org_email_domains": org_domains(environ.get("CHORUS_ORG_EMAIL_DOMAINS")),
             "use_case_dirs": use_case_dirs(args, environ)}
 
@@ -2873,6 +2903,10 @@ def render(plan, results, agree, exams=None, items=None, dropped=0, ct=None):
     if idle:
         out.append("drafted with help from **%s**, which did not review in this run: nothing of "
                    "it to discount" % ", ".join(idle))
+    if plan.get("confidential_frontier"):
+        out.append("outside any enclave: **%s** (approved for confidential in "
+                   "CHORUS_CONFIDENTIAL_FRONTIER: no TEE, no receipt)" % ", ".join(
+                       plan["confidential_frontier"]))
     out.append("")
     for r in results.values():
         bits = "%s @ %s" % (r["model"], r["host"])
@@ -3186,9 +3220,10 @@ def set_model(voices, n, val):
     voices[n]["model"] = model
 
 
-def resolve(args, cases):
+def resolve(args, cases, frontier=()):
     """Turn flags into (sensitivity, [voice names], {name: voice dict}, briefs, use case or
-    None). Exits on bad input."""
+    None). `frontier`: the voices approved in CHORUS_CONFIDENTIAL_FRONTIER. Exits on bad
+    input."""
     voices = {n: dict(v) for n, v in VOICES.items()}
     cls = args.cls
     names = list(dict.fromkeys(n.strip() for n in args.voices.split(",") if n.strip()))
@@ -3208,8 +3243,9 @@ def resolve(args, cases):
                "(pin hats with --hats)")
     if uc and not cls and uc["classes"] == ("confidential",):
         cls = "confidential"  # only the most restrictive level is ever implied
-        print("note: --use-case %s implies --sensitivity confidential (TEE voices only)"
-              % args.use_case, file=sys.stderr)
+        print("note: --use-case %s implies --sensitivity confidential (%s)" % (
+            args.use_case, "TEE voices, plus %s outside any enclave (CHORUS_CONFIDENTIAL_FRONTIER)"
+            % ", ".join(frontier) if frontier else "TEE voices only"), file=sys.stderr)
     if not cls:
         die(1, "STOP: declare the content's sensitivity with --sensitivity (%s)." % ", ".join(
             uc["classes"] if uc else SENSITIVITY))
@@ -3291,6 +3327,16 @@ def plan_effort(v):
         return claude_effort(v["model"], level) or "none sent"
     effort = chat_effort(v["model"], level)
     return "%s if the catalog lists it" % effort if effort else "none sent"
+
+
+def level_text(cls, outside):
+    """The sensitivity's meaning as the plan and the STOP line print it. At confidential it
+    names the frontier voices in the run (`outside`), which get the draft outside any
+    enclave."""
+    if cls == "confidential" and outside:
+        return "%s; except %s, approved in CHORUS_CONFIDENTIAL_FRONTIER, outside any enclave" % (
+            SENSITIVITY[cls], ", ".join(outside))
+    return SENSITIVITY[cls]
 
 
 def list_models(voices, names):
@@ -3419,7 +3465,8 @@ def main(argv=None):
         list_models({n: dict(v) for n, v in VOICES.items()}, names)
         return 0
 
-    cls, names, voices, briefs, uc = resolve(args, cases)
+    frontier = cfg["confidential_frontier"]
+    cls, names, voices, briefs, uc = resolve(args, cases, frontier)
     voice_settings(args, voices, cfg["confidential_upstreams"])
     if not args.file:
         die(1, "--file is required")
@@ -3474,14 +3521,16 @@ def main(argv=None):
     # Which voices may and can run.
     explicit = bool(names)
     candidates = names or [n for n in VOICES if voices[n].get("default", True)
-                           and (voices[n]["tee"] or cls != "confidential")]
+                           and (voices[n]["tee"] or cls != "confidential" or n in frontier)]
     plan_rows, runnable, refused, keyless = [], [], [], []
     for n in candidates:
         v = voices[n]
-        if cls == "confidential" and not v["tee"]:
-            refused.append("%s: sensitivity 'confidential' allows attested-TEE voices only" % n)
+        if cls == "confidential" and not v["tee"] and n not in frontier:
+            refused.append("%s: sensitivity 'confidential' allows attested-TEE voices only%s" % (
+                n, ", and the frontier voices in CHORUS_CONFIDENTIAL_FRONTIER (%s)" % ", ".join(
+                    frontier) if frontier else ""))
             continue
-        if cls == "confidential":
+        if cls == "confidential" and v["tee"]:
             skip = confidential_pins(n, v, explicit)
             if skip:
                 plan_rows.append(skip)
@@ -3530,8 +3579,11 @@ def main(argv=None):
         plan["redacted_by_operator"] = True
     if args.drafted_by:
         plan["drafted_by"] = list(args.drafted_by)
+    outside = [n for n in runnable if not voices[n]["tee"]] if cls == "confidential" else []
+    if outside:
+        plan["confidential_frontier"] = outside
     print("chorus → sensitivity=%s (%s) · briefs=%s · draft %d chars" % (
-        cls, SENSITIVITY[cls], ",".join(briefs), len(draft)), file=sys.stderr)
+        cls, level_text(cls, outside), ",".join(briefs), len(draft)), file=sys.stderr)
     note = (uc or {}).get("class_note", {}).get(cls)
     if uc:
         print("  use case: %s — %s" % (args.use_case, uc["what"]), file=sys.stderr)
@@ -3552,7 +3604,9 @@ def main(argv=None):
     for row in plan["voices"]:
         print("  %-7s %s @ %s%s · effort %s · wall %ds%s" % (
             row["voice"], row["model"], row["host"],
-            "  [TEE: checked before send]" if row["tee"] else "", row["effort"], row["timeout"],
+            "  [TEE: checked before send]" if row["tee"] else
+            "  [not a TEE: approved for confidential in CHORUS_CONFIDENTIAL_FRONTIER]"
+            if row["voice"] in outside else "", row["effort"], row["timeout"],
             " · pinned to %s" % " or ".join(row["upstreams"]) if row["upstreams"] else ""),
             file=sys.stderr)
     for msg in plan_rows:
@@ -3628,7 +3682,7 @@ def main(argv=None):
         return 0
     if not args.yes:
         hosts = sorted({voices[n]["base"].split("/")[2] for n in runnable})
-        words = ["the content's sensitivity is '%s' (%s)%s" % (cls, SENSITIVITY[cls],
+        words = ["the content's sensitivity is '%s' (%s)%s" % (cls, level_text(cls, outside),
                                                                "; " + note if note else "")]
         if args.allow_flagged:
             words.append("they checked each flagged line (--allow-flagged)")
