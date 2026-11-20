@@ -80,7 +80,7 @@ You declare a sensitivity for every run. The tool cannot classify your content f
 |---|---|---|
 | `public` | Published, or cleared for a public audience. | Every voice with a key (Gemini only when named in `--voices`). |
 | `internal` | Not public yet, but cleared to go to the frontier model APIs: a draft bound for a funder, a pre-launch post. | Every voice with a key (Gemini only when named). |
-| `confidential` | Must stay inside an attested enclave: financials, deal terms, personal data, an unfixed vulnerability. | The TEE voices only, pinned to upstreams you have approved, with zero data retention requested and every receipt verified. |
+| `confidential` | Must stay inside an attested enclave: financials, deal terms, personal data, an unfixed vulnerability. | The TEE voices only, pinned to upstreams you have approved, with zero data retention requested and every receipt verified. You can also approve named frontier voices here, outside any enclave (see [Frontier voices at confidential](#frontier-voices-at-confidential)). |
 
 A use case allowed only at `confidential` implies it. No other level is ever implied. Reviewers get the draft only, plus the funder's public call if you pass `--criteria`, never your source material.
 
@@ -120,6 +120,16 @@ export CHORUS_CONFIDENTIAL_UPSTREAMS="glm=upstream-a,upstream-b;kimi=upstream-c"
 
 `python3 chorus.py --list-models --voices glm` shows the upstream providers a model is served from. On a confidential run, each TEE voice is pinned to the live sessions of its approved upstreams (the session ids rotate, so they are read from the gateway's public session list just before each call), and its receipt must show only those sessions. A hop on any other upstream, or one the tool cannot name, fails the run with exit 5. A TEE voice with no approved upstream is skipped, or refused if you named it in `--voices`. `--upstream glm=upstream-a` pins a voice by hand at any sensitivity.
 
+### Frontier voices at confidential
+
+Some operators already send confidential material to a frontier provider through other tools, such as an agent harness that reads their files. Keeping that provider's voice out of confidential reviews then protects nothing. You can approve it by name:
+
+```bash
+export CHORUS_CONFIDENTIAL_FRONTIER="<voice>[,<voice>]"   # frontier voices: openai, claude, gemini
+```
+
+None is approved by default. A listed voice joins confidential runs like any other voice (Gemini still only when named in `--voices`), but it gets the draft in plaintext at its provider's API, under that provider's terms. There is no enclave, no receipt and no zero-retention request. The plan marks it `[not a TEE: approved for confidential in CHORUS_CONFIDENTIAL_FRONTIER]`, the STOP line names it before you confirm, and the report says it reviewed outside any enclave. The TEE voices in the same run keep every check: pinning, zero retention, receipts and exit 5. A TEE voice or an unknown name in the list exits 1. A frontier voice that is not listed is still refused at confidential.
+
 ## Cost and time
 
 **Cost.** In five live test runs of this design on synthetic drafts (October 2026), a three-voice review cost about $0.09 to $0.13. Your cost depends on the draft's length, the reasoning effort and current prices. Those runs had no Claude voice; it adds its own tokens at its own prices. Every report includes a table of each call's tokens and cost, and a run total: the gateway reports its own cost per call, and OpenAI's and Claude's are priced from their tokens using the price tables at the top of `chorus.py` (`OPENAI_PRICES`, read 2026-10-22, and `CLAUDE_PRICES`, read 2026-10-25; update them when prices change).
@@ -143,7 +153,7 @@ git clone https://github.com/fundingthecommons/cross-model-chorus
 cd cross-model-chorus
 ```
 
-Keys come from environment variables. Export them in your shell, or copy `.env.example` to a file outside every repo, fill it in, and pass it with `--env-file` (or set `CHORUS_ENV_FILE`). A loaded file never overrides a variable you have already set, and its values are screened out of your drafts. `.env.example` lists every variable the tool reads, by name. Confidential runs also need `CHORUS_CONFIDENTIAL_UPSTREAMS` (see [Upstream pinning](#upstream-pinning)); until it is set, they refuse and send nothing.
+Keys come from environment variables. Export them in your shell, or copy `.env.example` to a file outside every repo, fill it in, and pass it with `--env-file` (or set `CHORUS_ENV_FILE`). A loaded file never overrides a variable you have already set, and its values are screened out of your drafts. `.env.example` lists every variable the tool reads, by name. Confidential runs also need `CHORUS_CONFIDENTIAL_UPSTREAMS` (see [Upstream pinning](#upstream-pinning)); until it is set, the TEE voices refuse and send nothing. `CHORUS_CONFIDENTIAL_FRONTIER` lets named frontier voices review confidential content too (see [Frontier voices at confidential](#frontier-voices-at-confidential)).
 
 ```bash
 python3 chorus.py --list-use-cases
@@ -211,6 +221,7 @@ The tool is attended-only. An agent may run `--dry-run`, which sends nothing, to
 - **`--redact` helps, and it can miss things.** It folds case, accents, spacing and common joins, and the plan notes near-misses. Read every note, and hand-redact a scratch copy (then pass `--redacted`) for anything it cannot handle cleanly.
 - **The report quotes your draft.** Treat it with the draft's sensitivity.
 - **TEE proof rests on the gateway's receipts**, receipts are sometimes not stored, and confidential runs need an upstream allowlist you choose.
+- **A frontier voice approved for confidential has no TEE protection at all.** `CHORUS_CONFIDENTIAL_FRONTIER` records your trust in that provider; it does not add any.
 - **The TEE reasoning models are slow and uneven.** A voice that times out after sending loses its hats for that run; the report shows the voice as failed.
 - **Round 2 counts corroboration strictly.** A finding is corroborated only when another family flagged the same passage under the same brief (two drafting families do not corroborate each other); a passage flagged under different briefs is listed as an agreement and still cross-examined.
 - **`--drafted-by` is a label and a discount, not a cure.** It cannot take a family's preference for its own writing out of its review. It marks that family's tells pass as weak and softens its round-2 "refuted"; its other passes and its overall verdict are printed as given, so weigh them knowing who helped write the draft. A model that helped write the draft but is not named this way counts in full.
